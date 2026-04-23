@@ -17,61 +17,71 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Telegram notification
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TOPIC_ID: ${{ inputs.topic_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          PR_ADDITIONS: ${{ github.event.pull_request.additions }}
+          PR_DELETIONS: ${{ github.event.pull_request.deletions }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          EVENT="${{ github.event_name }}"
-          ACTION="${{ github.event.action }}"
-
-          if [ "$EVENT" = "issues" ]; then
-            case "$ACTION" in
+          if [ "$EVENT_NAME" = "issues" ]; then
+            case "$EVENT_ACTION" in
               opened)   EMOJI="🆕"; HEADER="New Issue" ;;
               closed)   EMOJI="✅"; HEADER="Issue Closed" ;;
               reopened) EMOJI="🔄"; HEADER="Issue Reopened" ;;
               *)        exit 0 ;;
             esac
-            URL="${{ github.event.issue.html_url }}"
-            TITLE=$(echo "${{ github.event.issue.title }}" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
-            BODY=$(echo "${{ github.event.issue.body }}" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
-          elif [ "$EVENT" = "pull_request" ]; then
-            case "$ACTION" in
+            URL="$ISSUE_URL"
+            TITLE=$(echo "$ISSUE_TITLE" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
+            BODY=$(echo "$ISSUE_BODY" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            case "$EVENT_ACTION" in
               opened)           EMOJI="🔀"; HEADER="New PR" ;;
               ready_for_review) EMOJI="👀"; HEADER="PR Ready for Review" ;;
               closed)
-                if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+                if [ "$PR_MERGED" = "true" ]; then
                   EMOJI="🟣"; HEADER="PR Merged"
                 else
                   EMOJI="❌"; HEADER="PR Closed"
                 fi ;;
               *) exit 0 ;;
             esac
-            URL="${{ github.event.pull_request.html_url }}"
-            TITLE=$(echo "${{ github.event.pull_request.title }}" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
-            BODY=$(echo "${{ github.event.pull_request.body }}" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
-            ADDITIONS="${{ github.event.pull_request.additions }}"
-            DELETIONS="${{ github.event.pull_request.deletions }}"
-            BASE="${{ github.event.pull_request.base.ref }}"
-            HEAD="${{ github.event.pull_request.head.ref }}"
+            URL="$PR_URL"
+            TITLE=$(echo "$PR_TITLE" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
+            BODY=$(echo "$PR_BODY" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
           fi
 
-          REPO_SHORT="${{ github.event.repository.name }}"
           MSG="${EMOJI} <b>${HEADER}</b>
 <a href=\"${URL}\">${TITLE}</a>
 
-📂 <code>${REPO_SHORT}</code>"
+📂 <code>${REPO_NAME}</code>"
 
           [ -n "$BODY" ] && MSG="${MSG}
 📝 <i>${BODY}</i>"
 
-          if [ "$EVENT" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             MSG="${MSG}
-🎯 <code>${BASE}</code> ← <code>${HEAD}</code>
-📊 <code>+${ADDITIONS} −${DELETIONS}</code>"
+🎯 <code>${PR_BASE}</code> <- <code>${PR_HEAD}</code>
+📊 <code>+${PR_ADDITIONS} -${PR_DELETIONS}</code>"
           fi
 
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
             -d "{
-              \"chat_id\": \"${{ secrets.TELEGRAM_CHAT_ID }}\",
-              \"message_thread_id\": ${{ inputs.topic_id }},
+              \"chat_id\": \"${CHAT_ID}\",
+              \"message_thread_id\": ${TOPIC_ID},
               \"text\": $(echo "$MSG" | jq -Rs .),
               \"parse_mode\": \"HTML\",
               \"disable_web_page_preview\": true
