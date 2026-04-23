@@ -1,0 +1,78 @@
+name: Notify Telegram (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      topic_id:
+        required: true
+        type: string
+    secrets:
+      TELEGRAM_BOT_TOKEN:
+        required: true
+      TELEGRAM_CHAT_ID:
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram notification
+        run: |
+          EVENT="${{ github.event_name }}"
+          ACTION="${{ github.event.action }}"
+
+          if [ "$EVENT" = "issues" ]; then
+            case "$ACTION" in
+              opened)   EMOJI="🆕"; HEADER="New Issue" ;;
+              closed)   EMOJI="✅"; HEADER="Issue Closed" ;;
+              reopened) EMOJI="🔄"; HEADER="Issue Reopened" ;;
+              *)        exit 0 ;;
+            esac
+            URL="${{ github.event.issue.html_url }}"
+            TITLE=$(echo "${{ github.event.issue.title }}" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
+            BODY=$(echo "${{ github.event.issue.body }}" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
+          elif [ "$EVENT" = "pull_request" ]; then
+            case "$ACTION" in
+              opened)           EMOJI="🔀"; HEADER="New PR" ;;
+              ready_for_review) EMOJI="👀"; HEADER="PR Ready for Review" ;;
+              closed)
+                if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+                  EMOJI="🟣"; HEADER="PR Merged"
+                else
+                  EMOJI="❌"; HEADER="PR Closed"
+                fi ;;
+              *) exit 0 ;;
+            esac
+            URL="${{ github.event.pull_request.html_url }}"
+            TITLE=$(echo "${{ github.event.pull_request.title }}" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
+            BODY=$(echo "${{ github.event.pull_request.body }}" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
+            ADDITIONS="${{ github.event.pull_request.additions }}"
+            DELETIONS="${{ github.event.pull_request.deletions }}"
+            BASE="${{ github.event.pull_request.base.ref }}"
+            HEAD="${{ github.event.pull_request.head.ref }}"
+          fi
+
+          REPO_SHORT="${{ github.event.repository.name }}"
+          MSG="${EMOJI} <b>${HEADER}</b>
+<a href=\"${URL}\">${TITLE}</a>
+
+📂 <code>${REPO_SHORT}</code>"
+
+          [ -n "$BODY" ] && MSG="${MSG}
+📝 <i>${BODY}</i>"
+
+          if [ "$EVENT" = "pull_request" ]; then
+            MSG="${MSG}
+🎯 <code>${BASE}</code> ← <code>${HEAD}</code>
+📊 <code>+${ADDITIONS} −${DELETIONS}</code>"
+          fi
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"chat_id\": \"${{ secrets.TELEGRAM_CHAT_ID }}\",
+              \"message_thread_id\": ${{ inputs.topic_id }},
+              \"text\": $(echo "$MSG" | jq -Rs .),
+              \"parse_mode\": \"HTML\",
+              \"disable_web_page_preview\": true
+            }"
