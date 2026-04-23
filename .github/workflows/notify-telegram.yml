@@ -25,64 +25,38 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
           PR_MERGED: ${{ github.event.pull_request.merged }}
-          PR_ADDITIONS: ${{ github.event.pull_request.additions }}
-          PR_DELETIONS: ${{ github.event.pull_request.deletions }}
-          PR_BASE: ${{ github.event.pull_request.base.ref }}
-          PR_HEAD: ${{ github.event.pull_request.head.ref }}
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
           if [ "$EVENT_NAME" = "issues" ]; then
             case "$EVENT_ACTION" in
-              opened)   EMOJI="[NEW]";     HEADER="New Issue" ;;
-              closed)   EMOJI="[CLOSED]";  HEADER="Issue Closed" ;;
-              reopened) EMOJI="[REOPEN]";  HEADER="Issue Reopened" ;;
+              opened)   HEADER="[NEW] New Issue"; URL="$ISSUE_URL"; TITLE="$ISSUE_TITLE" ;;
+              closed)   HEADER="[CLOSED] Issue Closed"; URL="$ISSUE_URL"; TITLE="$ISSUE_TITLE" ;;
+              reopened) HEADER="[REOPEN] Issue Reopened"; URL="$ISSUE_URL"; TITLE="$ISSUE_TITLE" ;;
               *)        exit 0 ;;
             esac
-            URL="$ISSUE_URL"
-            TITLE=$(echo "$ISSUE_TITLE" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
-            BODY=$(echo "$ISSUE_BODY" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
           elif [ "$EVENT_NAME" = "pull_request" ]; then
             case "$EVENT_ACTION" in
-              opened)           EMOJI="[PR]";     HEADER="New PR" ;;
-              ready_for_review) EMOJI="[REVIEW]"; HEADER="PR Ready for Review" ;;
+              opened)           HEADER="[PR] New PR"; URL="$PR_URL"; TITLE="$PR_TITLE" ;;
+              ready_for_review) HEADER="[REVIEW] PR Ready"; URL="$PR_URL"; TITLE="$PR_TITLE" ;;
               closed)
                 if [ "$PR_MERGED" = "true" ]; then
-                  EMOJI="[MERGED]"; HEADER="PR Merged"
+                  HEADER="[MERGED] PR Merged"
                 else
-                  EMOJI="[CLOSED]"; HEADER="PR Closed"
-                fi ;;
+                  HEADER="[CLOSED] PR Closed"
+                fi
+                URL="$PR_URL"; TITLE="$PR_TITLE" ;;
               *) exit 0 ;;
             esac
-            URL="$PR_URL"
-            TITLE=$(echo "$PR_TITLE" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
-            BODY=$(echo "$PR_BODY" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
+          else
+            exit 0
           fi
 
-          MSG="${EMOJI} <b>${HEADER}</b>
-<a href=\"${URL}\">${TITLE}</a>
-
-<code>${REPO_NAME}</code>"
-
-          [ -n "$BODY" ] && MSG="${MSG}
-<i>${BODY}</i>"
-
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            MSG="${MSG}
-<code>${PR_BASE}</code> <- <code>${PR_HEAD}</code>
-<code>+${PR_ADDITIONS} -${PR_DELETIONS}</code>"
-          fi
+          SAFE_TITLE=$(echo "$TITLE" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/#//g')
+          TEXT=$(printf '<b>%s</b>\n<a href="%s">%s</a>\n<code>%s</code>' "$HEADER" "$URL" "$SAFE_TITLE" "$REPO_NAME")
 
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"chat_id\": \"${CHAT_ID}\",
-              \"message_thread_id\": ${TOPIC_ID},
-              \"text\": $(echo "$MSG" | jq -Rs .),
-              \"parse_mode\": \"HTML\",
-              \"disable_web_page_preview\": true
-            }"
+            -d "{\"chat_id\":\"${CHAT_ID}\",\"message_thread_id\":${TOPIC_ID},\"text\":$(echo "$TEXT" | jq -Rs .),\"parse_mode\":\"HTML\",\"disable_web_page_preview\":true}"
