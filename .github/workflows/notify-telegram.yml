@@ -38,9 +38,9 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "issues" ]; then
             case "$EVENT_ACTION" in
-              opened)   EMOJI="🆕"; HEADER="New Issue" ;;
-              closed)   EMOJI="✅"; HEADER="Issue Closed" ;;
-              reopened) EMOJI="🔄"; HEADER="Issue Reopened" ;;
+              opened)   EMOJI="[NEW]";     HEADER="New Issue" ;;
+              closed)   EMOJI="[CLOSED]";  HEADER="Issue Closed" ;;
+              reopened) EMOJI="[REOPEN]";  HEADER="Issue Reopened" ;;
               *)        exit 0 ;;
             esac
             URL="$ISSUE_URL"
@@ -48,13 +48,13 @@ jobs:
             BODY=$(echo "$ISSUE_BODY" | head -c 150 | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
           elif [ "$EVENT_NAME" = "pull_request" ]; then
             case "$EVENT_ACTION" in
-              opened)           EMOJI="🔀"; HEADER="New PR" ;;
-              ready_for_review) EMOJI="👀"; HEADER="PR Ready for Review" ;;
+              opened)           EMOJI="[PR]";     HEADER="New PR" ;;
+              ready_for_review) EMOJI="[REVIEW]"; HEADER="PR Ready for Review" ;;
               closed)
                 if [ "$PR_MERGED" = "true" ]; then
-                  EMOJI="🟣"; HEADER="PR Merged"
+                  EMOJI="[MERGED]"; HEADER="PR Merged"
                 else
-                  EMOJI="❌"; HEADER="PR Closed"
+                  EMOJI="[CLOSED]"; HEADER="PR Closed"
                 fi ;;
               *) exit 0 ;;
             esac
@@ -66,15 +66,15 @@ jobs:
           MSG="${EMOJI} <b>${HEADER}</b>
 <a href=\"${URL}\">${TITLE}</a>
 
-📂 <code>${REPO_NAME}</code>"
+<code>${REPO_NAME}</code>"
 
           [ -n "$BODY" ] && MSG="${MSG}
-📝 <i>${BODY}</i>"
+<i>${BODY}</i>"
 
           if [ "$EVENT_NAME" = "pull_request" ]; then
             MSG="${MSG}
-🎯 <code>${PR_BASE}</code> <- <code>${PR_HEAD}</code>
-📊 <code>+${PR_ADDITIONS} -${PR_DELETIONS}</code>"
+<code>${PR_BASE}</code> <- <code>${PR_HEAD}</code>
+<code>+${PR_ADDITIONS} -${PR_DELETIONS}</code>"
           fi
 
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
